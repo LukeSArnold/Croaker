@@ -1,0 +1,46 @@
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #101727;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#main {
+  height: 100vh;
+  justify-content: center;
+  display: flex;
+}
+
+h1 {
+  color: white;
+}
+
+h1.convert-button {
+  user-select: none;
+  cursor: pointer;
+}
+
+h1.convert-button:hover {
+
+}
+
+h4.nav-bar-item {
+  cursor: pointer;
+  color: white;
+  user-select: none;
+}
+
+h4.nav-bar-item:hover {
+  cursor: pointer;
+  color: black;
+  background-color: white;;
+  user-select: none;
+
+}
