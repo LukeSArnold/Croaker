@@ -1,8 +1,7 @@
-import { useState, useEffect, useRef } from "react";
-import { Link } from "react-router";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { useTrack } from "../contexts/TrackContext";
-
 
 interface Track {
   id: number;
@@ -27,13 +26,11 @@ interface Track {
 }
 
 function History() {
-  const { trackId, setTrackId } = useTrack();
+  const { setTrackId, setTrackName, setArtistName, setArtistId, setAlbumArtUri } = useTrack();
+  const navigate = useNavigate();
   const [tracks, setTracks] = useState<Track[]>([]);
-  const [isPlaying, setIsPlaying] = useState<boolean>(false); // Track play status
-  const [currentTrackId, setCurrentTrackId] = useState<number | null>(null); // Track that is playing
-  const [currentTime, setCurrentTime] = useState<number>(0); // Current time of track
-  const [duration, setDuration] = useState<number>(0); // Track duration
-  const audioRef = useRef<HTMLAudioElement | null>(null); // Audio element reference
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [currentTrackId, setCurrentTrackId] = useState<number | null>(null);
 
   useEffect(() => {
     async function fetchHistory() {
@@ -50,26 +47,8 @@ function History() {
     fetchHistory();
   }, []);
 
-  useEffect(() => {
-    // Set up the audio element once
-    const audio = audioRef.current;
-
-    if (audio) {
-      // Handle audio time update to sync with the player
-      audio.ontimeupdate = () => {
-        setCurrentTime(audio.currentTime);
-      };
-
-      // Handle audio loaded metadata to get the track duration
-      audio.onloadedmetadata = () => {
-        setDuration(audio.duration);
-      };
-    }
-  }, []);
-
-  // Function to handle track download
   const downloadTrack = async (trackId: number, trackName: string, artistName: string, created: boolean) => {
-    if (!created) return; // Don't download if track is not created
+    if (!created) return;
 
     try {
       const response = await fetch(`/getsong?trackId=${trackId}`);
@@ -78,7 +57,6 @@ function History() {
         const url = URL.createObjectURL(audioBlob);
         const link = document.createElement("a");
         link.href = url;
-        // Set the filename to "songName - artistName.mp3"
         link.download = `${trackName} - ${artistName}.mp3`;
         link.click();
       } else {
@@ -89,80 +67,155 @@ function History() {
     }
   };
 
+  const updatePlayerInfo = (track: Track) => {
+    setTrackId(track.id);
+    setArtistName(track.artist.name);
+    setTrackName(track.name);
+    setAlbumArtUri(track.album.albumArtUri);
+    setArtistId(track.artist.id);
+  };
+
+  const handlePlayTrack = (track: Track) => {
+    if (!track.created) return;
+    updatePlayerInfo(track);
+  };
+
   return (
-    <div>
-      <div className="container-fluid">
+    <div className="container-fluid" style={{ height: "100vh" }}>
+      <div>
         <div className="row" style={{ height: "100%" }}>
-          <div className="col-md-12" style={{ height: "100vh", backgroundColor: "#1d3538" }}>    
-            {/* Track List */}
-            <div className="d-flex flex-wrap justify-content-center p-4">
+          <div className="col-md-12" style={{ height: "100%", backgroundColor: "#1d3538" }}>
+            <div className="d-flex flex-wrap justify-content-center p-4" style={{ flex: 1 }}>
               {tracks.map((track) => (
                 <div
                   key={track.id}
-                  className="card m-3"
+                  className="card m-3 track-card"
                   style={{
                     width: "200px",
-                    backgroundColor: track.created ? "#2d4d50" : "#1e3b3d", // Darken if created is false
+                    backgroundColor: track.created ? "#2d4d50" : "#1e3b3d",
                     border: "none",
                     position: "relative",
                     overflow: "hidden",
-                    transition: "background-color 0.3s ease",
                     height: "auto",
-                    cursor: track.created ? "pointer" : "not-allowed", // Disable click if created is false
+                    cursor: track.created ? "pointer" : "not-allowed",
+                    transition: "background-color 0.3s ease",
                   }}
+                  onClick={() => handlePlayTrack(track)}
                 >
-                  <div className="image-wrapper" onClick={() => track.created && setTrackId(track.id)}>
+                  <div
+                    className="image-wrapper"
+                    style={{
+                      position: "relative",
+                      overflow: "hidden",
+                      transition: "all 0.3s ease",
+                    }}
+                  >
                     <img
                       src={track.album.albumArtUri}
                       alt={`${track.album.name} cover`}
                       className="card-img-top album-image"
-                      style={{ width: "100%" }}
+                      style={{
+                        width: "100%",
+                        transition: "all 0.3s ease",
+                      }}
                     />
-                    {currentTrackId === track.id && isPlaying && (
-                      <div
-                        className="pause-button"
-                        onClick={() => track.created && setTrackId(track.id)} // Use the same function for pausing
-                        style={{
-                          position: "absolute",
-                          top: "50%",
-                          left: "50%",
-                          transform: "translate(-50%, -50%)",
-                          color: "white",
-                          fontSize: "30px",
-                          cursor: "pointer",
-                        }}
-                      >
-                        ⏸
-                      </div>
-                    )}
-                    {currentTrackId !== track.id || !isPlaying && (
-                      <div
-                        className="play-button"
-                        onClick={() => track.created && setTrackId(track.id)} // Use the same function for play
-                        style={{
-                          position: "absolute",
-                          top: "50%",
-                          left: "50%",
-                          transform: "translate(-50%, -50%)",
-                          color: "white",
-                          fontSize: "30px",
-                          cursor: "pointer",
-                        }}
-                      >
-                        ▶
-                      </div>
-                    )}
+                    <div
+                      className="overlay"
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: "rgba(0, 0, 0, 0.5)",
+                        opacity: 0,
+                        transition: "opacity 0.3s ease",
+                      }}
+                    />
+                    <div
+                      className="play-button-overlay"
+                      style={{
+                        position: "absolute",
+                        top: "50%",
+                        left: "50%",
+                        transform: "translate(-50%, -50%)",
+                        fontSize: "30px",
+                        color: "#ffffff",
+                        opacity: 0,
+                        transition: "opacity 0.3s ease",
+                      }}
+                    >
+                      ▶
+                    </div>
                   </div>
 
                   <div className="card-body text-center">
-                    <h5 className="card-title" style={{ color: "white" }}>{track.name}</h5>
-                    <p className="card-text" style={{ color: "#cccccc", marginBottom: "4px" }}>{track.album.name}</p>
-                    <p className="card-text" style={{ color: "#aaaaaa", fontSize: "0.9rem" }}>{track.artist.name}</p>
+                    <h5
+                      className="card-title"
+                      style={{ color: "white", marginBottom: "8px" }}
+                      onClick={() => handlePlayTrack(track)}
+                    >
+                      {track.name}
+                    </h5>
+
+                    <p
+                      className="card-text album-text"
+                      style={{
+                        color: "#66a2a9",
+                        marginBottom: "4px",
+                        cursor: "pointer",
+                        transition: "all 0.3s ease",
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/album/${track.album.id}`);
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.textDecoration = "underline";
+                        e.currentTarget.style.textShadow = "0 0 10px #66a2a9";
+                        e.currentTarget.style.transform = "scale(1.1)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.textDecoration = "none";
+                        e.currentTarget.style.textShadow = "none";
+                        e.currentTarget.style.transform = "scale(1)";
+                      }}
+                    >
+                      {track.album.name}
+                    </p>
+
+                    <p
+                      className="card-text artist-text"
+                      style={{
+                        color: "#aaaaaa",
+                        fontSize: "0.9rem",
+                        cursor: "pointer",
+                        transition: "all 0.3s ease",
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/artist/${track.artist.id}`);
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.textDecoration = "underline";
+                        e.currentTarget.style.textShadow = "0 0 10px #66a2a9";
+                        e.currentTarget.style.transform = "scale(1.1)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.textDecoration = "none";
+                        e.currentTarget.style.textShadow = "none";
+                        e.currentTarget.style.transform = "scale(1)";
+                      }}
+                    >
+                      {track.artist.name}
+                    </p>
                   </div>
 
-                  {/* Download Button at the bottom right of the card */}
                   <div
-                    onClick={() => downloadTrack(track.id, track.name, track.artist.name, track.created)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      downloadTrack(track.id, track.name, track.artist.name, track.created);
+                    }}
                     style={{
                       position: "absolute",
                       bottom: "10px",
@@ -171,7 +224,7 @@ function History() {
                       color: "white",
                       padding: "5px 10px",
                       borderRadius: "50%",
-                      cursor: track.created ? "pointer" : "not-allowed", // Disable if created is false
+                      cursor: track.created ? "pointer" : "not-allowed",
                       fontSize: "20px",
                     }}
                   >

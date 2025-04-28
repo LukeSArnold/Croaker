@@ -9,6 +9,7 @@ import { raw } from 'body-parser';
 import { Queue, QueueEvents, Job} from 'bullmq';
 import { PrismaClient } from './generated/prisma';
 import { Request, Response } from "express";
+import { A } from 'ollama/dist/shared/ollama.f6b57f53';
 const multer = require("multer")
 
 type Input = {
@@ -449,6 +450,90 @@ app.get("/gethistory", async (req, res) => {
   }
 });
 
+app.get("/getalbums", async (req, res) => {
+  try {
+    const albums = await prisma.album.findMany({
+      orderBy: {
+        name: "asc",
+      },
+      include: {
+        artist: true,
+      },
+    });
+
+    const formattedAlbums = albums.map(album => ({
+      id: album.id,
+      name: album.name,
+      albumArtUri: album.albumArtUri,
+      released: album.released,
+      artist: {
+        id: album.artist.id,
+        name: album.artist.name,
+      }
+    }));
+
+    res.json(formattedAlbums);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch track history" });
+  }
+})
+
+app.get("/getalbum", async (req: any, res: any) => {
+  try {
+    const albumId: number = parseInt(req.query.albumId as string, 10); // Ensure you use query or params to pass albumId.
+
+    // Fetch the album by its ID
+    const album = await prisma.album.findUnique({
+      where: { id: albumId },
+      include: {
+        artist: true, // Include artist details
+      }
+    });
+
+    // If album not found, return a 404 error
+    if (!album) {
+      return res.status(404).json({ error: "Album not found" });
+    }
+
+    // Fetch tracks associated with the album
+    const tracks = await prisma.track.findMany({
+      where: { albumId: albumId },
+      orderBy: { track_number: "asc" },  // You can change to "desc" if desired
+      include: {
+        artist: true,  // Include artist for each track if needed
+      }
+    });
+
+    // Format the album and tracks data
+    const formattedAlbum = {
+      id: album.id,
+      name: album.name,
+      albumArtUri: album.albumArtUri,
+      released: album.released,
+      artist: {
+        id: album.artist.id,
+        name: album.artist.name,
+      },
+      tracks: tracks.map((track) => ({
+        id: track.id,
+        name: track.name,
+        duration_ms: track.duration_ms,
+        track_number: track.track_number,
+        artist: {
+          id: track.artist.id,
+          name: track.artist.name,
+        }
+      })),
+    };
+
+    res.json(formattedAlbum);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch album and track data" });
+  }
+});
+
 app.get("/getsong", async (req: any, res: any) => {
   try {
     const trackId: number = parseInt(req.query.trackId as string, 10); // Ensure you use query or params to pass trackId.
@@ -507,6 +592,41 @@ app.get("/getsong", async (req: any, res: any) => {
   }
 });
 
+app.get("/getartist", async (req: any, res: any) => {
+  try {
+    const artistId: number = parseInt(req.query.artistId as string, 10);
+
+    const artist_info = await prisma.artist.findUnique({
+      where: { id: artistId },
+    });
+
+    if (!artist_info) {
+      return res.status(404).json({ error: "Artist not found" });
+    }
+
+    const albums = await prisma.album.findMany({
+      where: { artistId: artistId },
+      orderBy: { released: "desc" }, // Optional: sort albums by release date
+    });
+
+    const formattedArtist = {
+      id: artist_info.id,
+      name: artist_info.name,
+      albums: albums.map((album) => ({
+        id: album.id,
+        name: album.name,
+        albumArtUri: album.albumArtUri,
+        released: album.released,
+      })),
+    };
+
+    res.json(formattedArtist);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch artist information" });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server is listening on port ${port}`);
 });
@@ -535,10 +655,4 @@ app.get('*', (req, res) => {
       </body>
     </html>
     `);
-});
-
-
-
-// server.listen(port, () => {
-//   console.log(`Server is running on http://localhost:${port}`);
-// });
+}); 
