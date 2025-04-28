@@ -9,13 +9,12 @@ import { promisify } from 'util';
 import stream from 'stream';
 import fluentFfmpeg from 'fluent-ffmpeg'; 
 import FormData from 'form-data';
+import fetch from 'node-fetch';
 
 const pipeline = promisify(stream.pipeline);
 
 const YouTubeSearchApi = require('youtube-search-api') as any;
 const multer = require("multer") as any;
-
-const fetch = require('node-fetch');
 
 config();
 
@@ -254,6 +253,7 @@ new Worker("convert", async (job) => {
     form.append('album_name', album_name);
     form.append('artist_name', artist_name);
     form.append('track_name', track_name);
+    form.append('track_id', trackID.toString());
 
     const BASE_URL = process.env.SERVER_URL || 'http://host.docker.internal:3000';
 

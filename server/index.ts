@@ -8,8 +8,8 @@ import path from 'path';
 import { raw } from 'body-parser';
 import { Queue, QueueEvents, Job} from 'bullmq';
 import { PrismaClient } from './generated/prisma';
+import { Request, Response } from "express";
 const multer = require("multer")
-
 
 type Input = {
   artistName: string;
@@ -311,7 +311,7 @@ async function convertSong(track: Map<any, any>){
   let track_length: number = track.get("duration_ms");
   let track_number: number = track.get("track_number")
 
-  await ensureArtistAlbumFolders("./music", artist_name, album_name)
+  await ensureArtistAlbumFolders("./Music", artist_name, album_name)
   
   let input: Input = {
     artistName: artist_name, 
@@ -368,16 +368,144 @@ app.post('/upload', upload.single('file'), async (req, res): Promise<void> => {
     return;
   }
 
-  const uploadedFilePath = req.file.path; // Path to the saved file on disk
-  console.log(`Received MP3 file, saved at ${uploadedFilePath}`);
+  try {
+    const uploadedFilePath = req.file.path;
+    console.log(`Received MP3 file, saved at ${uploadedFilePath}`);
 
-  // Optionally process the file here or move it if needed
-  // For example, you can move the file or process it using ffmpeg, etc.
+    const { album_name, artist_name, track_name, trackID } = req.body;
+    const trackId = parseInt(req.body.track_id, 10);
 
-  // Respond with a success message
-  res.status(200).send({ message: 'File uploaded successfully!' });
+    if (!album_name || !artist_name || !track_name) {
+      res.status(400).send({ error: 'Missing album, artist, or track name' });
+      return;
+    }
+
+    // Build destination folder and file path
+    const destinationFolder = path.join('Music', artist_name, album_name);
+    const destinationFileName = `${track_name}-${artist_name}.mp3`;
+    const destinationPath = path.join(destinationFolder, destinationFileName);
+
+    // Make sure the destination folder exists
+    await fs.promises.mkdir(destinationFolder, { recursive: true });
+
+    // Move the uploaded file
+    await fs.promises.rename(uploadedFilePath, destinationPath);
+
+    console.log(`Moved and renamed file to ${destinationPath}`);
+    res.status(200).send({ message: 'File uploaded and moved successfully!' });
+
+    console.log(`Marking ${track_name} as completed`)
+
+    await prisma.track.update({
+      where: { id: trackId },
+      data: { created: true },
+    });
+    
+  
+  } catch (err) {
+    console.error('Error processing uploaded file:', err);
+    res.status(500).send({ error: 'Failed to process uploaded file' });
+  }
 });
 
+app.get("/gethistory", async (req, res) => {
+  try {
+    const tracks = await prisma.track.findMany({
+      orderBy: {
+        track_number: "asc",
+      },
+      include: {
+        artist: true,
+        album: true,
+      },
+    });
+
+    const formattedTracks = tracks.map(track => ({
+      id: track.id,
+      name: track.name,
+      duration_ms: track.duration_ms,
+      track_number: track.track_number,
+      created: track.created,
+      artist: {
+        id: track.artist.id,
+        name: track.artist.name,
+      },
+      album: {
+        id: track.album.id,
+        name: track.album.name,
+        albumArtUri: track.album.albumArtUri,
+        released: track.album.released,
+        artist: {
+          id: track.artist.id,
+          name: track.artist.name,
+        }
+      }
+    }));
+
+    res.json(formattedTracks);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch track history" });
+  }
+});
+
+app.get("/getsong", async (req: any, res: any) => {
+  try {
+    const trackId: number = parseInt(req.query.trackId as string, 10); // Ensure you use query or params to pass trackId.
+
+    // Get track information from the database
+    const track_info = await prisma.track.findUnique({
+      where: { id: trackId },
+    });
+
+    if (!track_info) {
+      return res.status(404).json({ error: "Track not found" });
+    }
+
+    const { name: track_name, artistId, albumId } = track_info;
+
+    // Get album and artist information
+    const album_info = await prisma.album.findUnique({
+      where: { id: albumId },
+    });
+    const artist_info = await prisma.artist.findUnique({
+      where: { id: artistId },
+    });
+
+    if (!album_info || !artist_info) {
+      return res.status(404).json({ error: "Album or artist not found" });
+    }
+
+    const { name: album_name } = album_info;
+    const { name: artist_name } = artist_info;
+
+    // Build the file path
+    const file_path = path.join(
+      __dirname,
+      "Music", // Assuming "Music" folder is at the root level of your project
+      artist_name,
+      album_name,
+      `${track_name}-${artist_name}.mp3`
+    );
+
+    // Check if the file exists
+    if (!fs.existsSync(file_path)) {
+      return res.status(404).json({ error: "File not found" });
+    }
+
+    // Send the file to the client
+    res.sendFile(file_path, (err: any) => {
+      if (err) {
+        console.error("Error sending file:", err);
+        res.status(500).send("Failed to send file");
+      }
+    });
+
+  } catch (error) {
+    console.error("Error in /getsong endpoint:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 app.listen(port, () => {
   console.log(`Server is listening on port ${port}`);
